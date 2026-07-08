@@ -8,12 +8,15 @@ A multi-threaded HTTP/1.1 web server built from scratch in C++ using POSIX socke
 - Each accepted connection is handed to a new pthread, which reads the raw bytes and closes the connection.
 
 ## Folder Structure
-http-server-cpp/
+
+```text
+http-server/
 ├── src/
 │   ├── main.cpp
 │   ├── server.h
-│   └── server.cpp
+│   ├── server.cpp
 ├── public/
-│   └── index.html        
+│   └── index.html
 ├── Makefile
 └── README.md
+```

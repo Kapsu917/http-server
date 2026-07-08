@@ -1,0 +1,11 @@
+# Build artifacts
+server
+build/
+*.o
+*.out
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
