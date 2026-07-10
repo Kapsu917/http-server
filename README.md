@@ -10,11 +10,13 @@ A multi-threaded HTTP/1.1 web server built from scratch in C++ using POSIX socke
 ## Folder Structure
 
 ```text
-http-server/
+http-server-cpp/
 ├── src/
 │   ├── main.cpp
 │   ├── server.h
 │   ├── server.cpp
+│   ├── request.h
+│   └── request.cpp
 ├── public/
 │   └── index.html
 ├── Makefile
