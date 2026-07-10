@@ -1,4 +1,5 @@
 #include "server.h"
+#include "request.h"
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
@@ -16,7 +17,6 @@ void Server::setupSocket() {
         exit(1);
     }
 
-    // Lets us restart the server immediately without "Address already in use"
     int opt = 1;
     setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -49,7 +49,6 @@ void Server::acceptLoop() {
             continue;
         }
 
-        // Handed off to its own thread so the main loop keeps accepting new connections
         int* clientFdPtr = new int(clientFd);
         pthread_t thread;
         pthread_create(&thread, nullptr, handleClient, clientFdPtr);
@@ -61,13 +60,27 @@ void* Server::handleClient(void* arg) {
     int clientFd = *(int*)arg;
     delete (int*)arg;
 
-    char buffer[4096] = {0};
+    char buffer[8192] = {0};
     ssize_t bytesRead = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
 
     if (bytesRead > 0) {
-        std::cout << "----- Raw request received -----\n";
-        std::cout << buffer << std::endl;
-        std::cout << "---------------------------------" << std::endl;
+        std::string rawRequest(buffer, bytesRead);
+        HttpRequest request = parseRequest(rawRequest);
+
+        std::cout << "----- Parsed Request -----" << std::endl;
+        std::cout << "Method: " << request.method << std::endl;
+        std::cout << "Path: " << request.path << std::endl;
+        std::cout << "Version: " << request.version << std::endl;
+
+        std::cout << "Headers:" << std::endl;
+        for (const auto& header : request.headers) {
+            std::cout << "  " << header.first << ": " << header.second << std::endl;
+        }
+
+        if (!request.body.empty()) {
+            std::cout << "Body: " << request.body << std::endl;
+        }
+        std::cout << "---------------------------" << std::endl;
     }
 
     close(clientFd);
