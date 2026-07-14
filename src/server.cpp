@@ -1,5 +1,6 @@
 #include "server.h"
 #include "request.h"
+#include "response.h"
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
@@ -56,6 +57,23 @@ void Server::acceptLoop() {
     }
 }
 
+// Builds a response for the parsed request.
+// Static file serving isn't wired in yet (Milestone 4) so GET requests
+// currently get a placeholder body just to prove the response builder works.
+static std::string routeRequest(const HttpRequest& request) {
+    if (request.method != "GET" && request.method != "POST") {
+        return buildResponse(405, "text/plain", "Method Not Allowed");
+    }
+
+    if (request.method == "GET") {
+        std::string body = "You requested: " + request.path;
+        return buildResponse(200, "text/plain", body);
+    }
+
+    // POST requests: echo the body back (real /api/echo route comes in Milestone 5)
+    return buildResponse(200, "text/plain", request.body);
+}
+
 void* Server::handleClient(void* arg) {
     int clientFd = *(int*)arg;
     delete (int*)arg;
@@ -70,17 +88,10 @@ void* Server::handleClient(void* arg) {
         std::cout << "----- Parsed Request -----" << std::endl;
         std::cout << "Method: " << request.method << std::endl;
         std::cout << "Path: " << request.path << std::endl;
-        std::cout << "Version: " << request.version << std::endl;
-
-        std::cout << "Headers:" << std::endl;
-        for (const auto& header : request.headers) {
-            std::cout << "  " << header.first << ": " << header.second << std::endl;
-        }
-
-        if (!request.body.empty()) {
-            std::cout << "Body: " << request.body << std::endl;
-        }
         std::cout << "---------------------------" << std::endl;
+
+        std::string response = routeRequest(request);
+        send(clientFd, response.c_str(), response.size(), 0);
     }
 
     close(clientFd);
