@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -pthread
 
-SRC = src/main.cpp src/server.cpp src/request.cpp
+SRC = src/main.cpp src/server.cpp src/request.cpp src/response.cpp
 TARGET = server
 
 all: $(TARGET)
