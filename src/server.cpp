@@ -1,6 +1,6 @@
 #include "server.h"
 #include "request.h"
-#include "response.h"
+#include "router.h"
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
@@ -9,7 +9,14 @@
 #include <netinet/in.h>
 #include <pthread.h>
 
+volatile sig_atomic_t Server::running = 1;
+
 Server::Server(int port) : port(port), serverFd(-1) {}
+
+void Server::handleSigint(int signum) {
+    (void)signum; // unused parameter, silences compiler warning
+    running = 0;
+}
 
 void Server::setupSocket() {
     serverFd = socket(AF_INET, SOCK_STREAM, 0);
@@ -40,12 +47,15 @@ void Server::setupSocket() {
 }
 
 void Server::acceptLoop() {
-    while (true) {
+    while (running) {
         sockaddr_in clientAddress{};
         socklen_t clientLen = sizeof(clientAddress);
 
         int clientFd = accept(serverFd, (sockaddr*)&clientAddress, &clientLen);
         if (clientFd < 0) {
+            // SIGINT interrupts the blocking accept() call, which returns -1.
+            // If running is now false, this was a shutdown, not a real error.
+            if (!running) break;
             perror("accept failed");
             continue;
         }
@@ -55,23 +65,10 @@ void Server::acceptLoop() {
         pthread_create(&thread, nullptr, handleClient, clientFdPtr);
         pthread_detach(thread);
     }
-}
 
-// Builds a response for the parsed request.
-// Static file serving isn't wired in yet (Milestone 4) so GET requests
-// currently get a placeholder body just to prove the response builder works.
-static std::string routeRequest(const HttpRequest& request) {
-    if (request.method != "GET" && request.method != "POST") {
-        return buildResponse(405, "text/plain", "Method Not Allowed");
-    }
-
-    if (request.method == "GET") {
-        std::string body = "You requested: " + request.path;
-        return buildResponse(200, "text/plain", body);
-    }
-
-    // POST requests: echo the body back (real /api/echo route comes in Milestone 5)
-    return buildResponse(200, "text/plain", request.body);
+    close(serverFd);
+    std::cout << "\nShutting down. Total requests served: "
+              << getRequestCount() << std::endl;
 }
 
 void* Server::handleClient(void* arg) {
@@ -85,10 +82,7 @@ void* Server::handleClient(void* arg) {
         std::string rawRequest(buffer, bytesRead);
         HttpRequest request = parseRequest(rawRequest);
 
-        std::cout << "----- Parsed Request -----" << std::endl;
-        std::cout << "Method: " << request.method << std::endl;
-        std::cout << "Path: " << request.path << std::endl;
-        std::cout << "---------------------------" << std::endl;
+        std::cout << request.method << " " << request.path << std::endl;
 
         std::string response = routeRequest(request);
         send(clientFd, response.c_str(), response.size(), 0);
@@ -99,6 +93,12 @@ void* Server::handleClient(void* arg) {
 }
 
 void Server::start() {
+    struct sigaction sa{};
+    sa.sa_handler = handleSigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;  // deliberately NOT SA_RESTART, so accept() returns EINTR
+    sigaction(SIGINT, &sa, nullptr);
+
     setupSocket();
     acceptLoop();
 }
