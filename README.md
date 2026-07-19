@@ -7,7 +7,7 @@ A multi-threaded HTTP/1.1 web server built from scratch in C++ using POSIX socke
 - Main thread runs an infinite `accept()` loop and never blocks on client I/O.
 - Each accepted connection is handed to a new pthread, which reads the raw bytes and closes the connection.
 - `buildResponse()` constructs a valid HTTP/1.1 response string with status line, Content-Type, Content-Length, and Connection: close headers.
-- `routeRequest()` is a temporary placeholder router — real routing (static files, /api/status, /api/echo) is added in Milestones 4–5.
+- `routeRequest()` is a temporary placeholder router real routing (static files, /api/status, /api/echo) is added later.
 
 ## Folder Structure
 
@@ -20,7 +20,9 @@ http-server-cpp/
 │   ├── request.h
 │   ├── request.cpp
 │   ├── response.h
-│   └── response.cpp
+│   ├── response.cpp
+│   ├── router.h
+│   └── router.cpp
 ├── public/
 │   └── index.html
 ├── Makefile
