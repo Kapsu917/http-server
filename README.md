@@ -28,3 +28,15 @@ http-server-cpp/
 ├── Makefile
 └── README.md
 ```
+## Benchmarks
+
+Load tested with:
+
+```bash
+wrk -t4 -c100 -d15s http://localhost:8080/
+```
+
+| Version | Requests/sec | Avg Latency |
+|---------|-------------:|------------:|
+| Thread-per-connection (before) | 21637.57 | 27.11 ms |
+| Epoll event loop (after) | 24835.62 | 4.00 ms |
