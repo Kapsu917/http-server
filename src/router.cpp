@@ -18,6 +18,16 @@ std::string getMimeType(const std::string& path) {
     return "application/octet-stream";
 }
 
+bool shouldKeepAlive(const HttpRequest& request) {
+    auto it = request.headers.find("Connection");
+    if (it != request.headers.end()) {
+        if (it->second == "close") return false;
+        if (it->second == "keep-alive") return true;
+    }
+    // HTTP/1.1 defaults to keep-alive; HTTP/1.0 defaults to close
+    return request.version == "HTTP/1.1";
+}
+
 // Reads a file fully into outContent. Returns false if it doesn't exist.
 static bool readFile(const std::string& filePath, std::string& outContent) {
     std::ifstream file(filePath, std::ios::binary);
@@ -29,20 +39,20 @@ static bool readFile(const std::string& filePath, std::string& outContent) {
     return true;
 }
 
-static std::string serveStaticFile(std::string path) {
+static std::string serveStaticFile(std::string path,bool keepAlive) {
     if (path == "/") path = "/index.html";
 
     std::string filePath = "./public" + path;
     std::string content;
 
     if (!readFile(filePath, content)) {
-        return buildResponse(404, "text/plain", "404 Not Found");
+        return buildResponse(404, "text/plain", "404 Not Found",keepAlive);
     }
 
-    return buildResponse(200, getMimeType(filePath), content);
+    return buildResponse(200, getMimeType(filePath), content,keepAlive);
 }
 
-static std::string handleApiStatus() {
+static std::string handleApiStatus(bool keepAlive) {
     int count;
     {
         std::lock_guard<std::mutex> lock(requestCountMutex);
@@ -57,33 +67,34 @@ static std::string handleApiStatus() {
          << "\"requests_served\": " << count
          << "}";
 
-    return buildResponse(200, "application/json", json.str());
+    return buildResponse(200, "application/json", json.str(), keepAlive);
 }
 
-static std::string handleApiEcho(const HttpRequest& request) {
-    return buildResponse(200, "text/plain", request.body);
+static std::string handleApiEcho(const HttpRequest& request, bool keepAlive) {
+    return buildResponse(200, "text/plain", request.body, keepAlive);
 }
 
 std::string routeRequest(const HttpRequest& request) {
-    // Count every request that comes through, regardless of route
     {
         std::lock_guard<std::mutex> lock(requestCountMutex);
         requestCount++;
     }
 
+    bool keepAlive = shouldKeepAlive(request);
+
     if (request.path == "/api/status" && request.method == "GET") {
-        return handleApiStatus();
+        return handleApiStatus(keepAlive);
     }
 
     if (request.path == "/api/echo" && request.method == "POST") {
-        return handleApiEcho(request);
+        return handleApiEcho(request, keepAlive);
     }
 
     if (request.method == "GET") {
-        return serveStaticFile(request.path);
+        return serveStaticFile(request.path, keepAlive);
     }
 
-    return buildResponse(405, "text/plain", "Method Not Allowed");
+    return buildResponse(405, "text/plain", "Method Not Allowed", keepAlive);
 }
 
 int getRequestCount() {

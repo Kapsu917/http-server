@@ -10,13 +10,13 @@ std::string statusText(int statusCode) {
     }
 }
 
-std::string buildResponse(int statusCode, const std::string& contentType, const std::string& body) {
+std::string buildResponse(int statusCode, const std::string& contentType, const std::string& body, bool keepAlive) {
     std::ostringstream response;
 
     response << "HTTP/1.1 " << statusCode << " " << statusText(statusCode) << "\r\n";
     response << "Content-Type: " << contentType << "\r\n";
     response << "Content-Length: " << body.size() << "\r\n";
-    response << "Connection: close\r\n";
+    response << "Connection: " << (keepAlive ? "keep-alive" : "close") << "\r\n";
     response << "\r\n";
     response << body;
 

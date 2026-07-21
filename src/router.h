@@ -14,4 +14,8 @@ std::string routeRequest(const HttpRequest& request);
 // Total requests served since the server started (thread-safe read).
 int getRequestCount();
 
+// Decides whether the connection should stay open after this response,
+// based on the Connection header and HTTP version (per the HTTP/1.1 spec).
+bool shouldKeepAlive(const HttpRequest& request);
+
 #endif
