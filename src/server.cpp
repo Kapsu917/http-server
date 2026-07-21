@@ -5,11 +5,13 @@
 #include <cstring>
 #include <unistd.h>
 #include <fcntl.h>
+#include <vector>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 
 volatile sig_atomic_t Server::running = 1;
+static const int IDLE_TIMEOUT_SECONDS = 15;
 
 Server::Server(int port) : port(port), serverFd(-1), epollFd(-1) {}
 
@@ -53,8 +55,6 @@ void Server::setupSocket() {
 }
 
 void Server::acceptNewConnections() {
-    // Loop until accept() returns -1 (EAGAIN), since epoll's level-triggered
-    // mode only tells us "at least one connection is ready", not how many.
     while (true) {
         int clientFd = accept(serverFd, nullptr, nullptr);
         if (clientFd < 0) {
@@ -69,6 +69,7 @@ void Server::acceptNewConnections() {
         epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &event);
 
         clientBuffers[clientFd] = "";
+        lastActivity[clientFd] = time(nullptr);
     }
 }
 
@@ -76,6 +77,22 @@ void Server::closeConnection(int clientFd) {
     epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
     close(clientFd);
     clientBuffers.erase(clientFd);
+    lastActivity.erase(clientFd);
+}
+
+void Server::closeIdleConnections() {
+    time_t now = time(nullptr);
+    std::vector<int> idleFds;
+
+    for (const auto& entry : lastActivity) {
+        if (difftime(now, entry.second) > IDLE_TIMEOUT_SECONDS) {
+            idleFds.push_back(entry.first);
+        }
+    }
+
+    for (int fd : idleFds) {
+        closeConnection(fd);
+    }
 }
 
 void Server::handleClientReadable(int clientFd) {
@@ -83,15 +100,15 @@ void Server::handleClientReadable(int clientFd) {
     ssize_t bytesRead = recv(clientFd, buffer, sizeof(buffer), 0);
 
     if (bytesRead <= 0) {
-        // 0 means the client closed the connection; <0 means error or EAGAIN
         closeConnection(clientFd);
         return;
     }
 
     clientBuffers[clientFd].append(buffer, bytesRead);
+    lastActivity[clientFd] = time(nullptr);
 
     if (!isRequestComplete(clientBuffers[clientFd])) {
-        return; // wait for the rest on a future epoll event
+        return;
     }
 
     HttpRequest request = parseRequest(clientBuffers[clientFd]);
@@ -100,7 +117,11 @@ void Server::handleClientReadable(int clientFd) {
     std::string response = routeRequest(request);
     send(clientFd, response.c_str(), response.size(), 0);
 
-    closeConnection(clientFd); // no keep-alive yet — added in Milestone 10
+    if (shouldKeepAlive(request)) {
+        clientBuffers[clientFd].clear(); // ready for the next request on this connection
+    } else {
+        closeConnection(clientFd);
+    }
 }
 
 void Server::eventLoop() {
@@ -108,10 +129,11 @@ void Server::eventLoop() {
     epoll_event events[MAX_EVENTS];
 
     while (running) {
-        int numEvents = epoll_wait(epollFd, events, MAX_EVENTS, -1);
+        // 5-second timeout lets us periodically sweep idle keep-alive connections
+        int numEvents = epoll_wait(epollFd, events, MAX_EVENTS, 5000);
 
         if (numEvents < 0) {
-            if (!running) break; // interrupted by SIGINT
+            if (!running) break;
             perror("epoll_wait failed");
             continue;
         }
@@ -125,6 +147,8 @@ void Server::eventLoop() {
                 handleClientReadable(fd);
             }
         }
+
+        closeIdleConnections();
     }
 
     close(epollFd);
@@ -137,7 +161,7 @@ void Server::start() {
     struct sigaction sa{};
     sa.sa_handler = handleSigint;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0; // no SA_RESTART, so epoll_wait is interrupted by SIGINT
+    sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
 
     setupSocket();
