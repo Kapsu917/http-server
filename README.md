@@ -1,6 +1,6 @@
 # HTTP Web Server in C++
 
-A high-performance HTTP/1.1 web server built from scratch in C++ using POSIX sockets and Linux epoll. The server implements non-blocking I/O, persistent connections, static file serving, REST endpoints, graceful shutdown, and unit-tested HTTP request parsing without third-party frameworks.
+A HTTP/1.1 web server built from scratch in C++ using POSIX sockets and Linux epoll. The server implements non-blocking I/O, persistent connections, static file serving, REST endpoints, graceful shutdown, and unit-tested HTTP request parsing without third-party frameworks.
 
 ## Architecture 
 - **Event loop:** Single-threaded, non-blocking I/O using Linux `epoll` (level-triggered). The listening socket and every client socket are set non-blocking via `fcntl`.
